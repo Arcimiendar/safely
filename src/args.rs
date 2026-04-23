@@ -7,7 +7,7 @@ pub struct Args {
     pub config: PathBuf,
 
     #[arg(trailing_var_arg = true)]
-    pub rest: Vec<String>,
+    pub command: Vec<String>,
 
     #[arg(short, long, env, default_value = "/bin/sh")]
     pub shell: String
@@ -22,7 +22,7 @@ mod tests {
     fn default_config_when_not_specified() {
         let args = Args::parse_from(["safely"]);
         assert_eq!(args.config, PathBuf::from(".safely"));
-        assert!(args.rest.is_empty());
+        assert!(args.command.is_empty());
     }
 
     #[test]
@@ -40,7 +40,7 @@ mod tests {
     #[test]
     fn collects_trailing_args() {
         let args = Args::parse_from(["safely", "echo", "hello", "world"]);
-        assert_eq!(args.rest, vec!["echo", "hello", "world"]);
+        assert_eq!(args.command, vec!["echo", "hello", "world"]);
         assert_eq!(args.config, PathBuf::from(".safely"));
     }
 
@@ -48,13 +48,13 @@ mod tests {
     fn config_flag_with_trailing_args() {
         let args = Args::parse_from(["safely", "-c", "cfg", "run", "--force"]);
         assert_eq!(args.config, PathBuf::from("cfg"));
-        assert_eq!(args.rest, vec!["run", "--force"]);
+        assert_eq!(args.command, vec!["run", "--force"]);
     }
 
     #[test]
     fn trailing_args_preserve_unknown_flags() {
         let args = Args::parse_from(["safely", "cmd", "--unknown-flag", "-x"]);
-        assert_eq!(args.rest, vec!["cmd", "--unknown-flag", "-x"]);
+        assert_eq!(args.command, vec!["cmd", "--unknown-flag", "-x"]);
     }
 
     #[test]
