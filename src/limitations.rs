@@ -21,12 +21,12 @@ pub fn prepare_limitations(config: &str) -> Result<()> {
     WalkDir::new("./")
         .into_iter()
         .flat_map(Result::ok)
-        .filter(|entry| does_entry_matches(entry, &glob_set))
+        .filter(|entry| does_entry_matche(entry, &glob_set))
         .for_each(block);
     Ok(())
 }
 
-fn does_entry_matches(entry: &DirEntry, glob_set: &GlobSet) -> bool {
+fn does_entry_matche(entry: &DirEntry, glob_set: &GlobSet) -> bool {
     let path = entry.path();
 
     let relative = path.strip_prefix("./").unwrap_or(path);
