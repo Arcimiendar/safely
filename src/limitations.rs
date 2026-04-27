@@ -31,7 +31,7 @@ fn does_entry_matches(entry: &DirEntry, glob_set: &GlobSet) -> bool {
 
     let relative = path.strip_prefix("./").unwrap_or(path);
 
-    glob_set.is_match(relative)
+    glob_set.is_match(relative) || glob_set.is_match(path)
 }
 
 fn block(entry: DirEntry) {
