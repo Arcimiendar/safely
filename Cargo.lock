@@ -412,7 +412,6 @@ dependencies = [
  "anyhow",
  "clap",
  "ignore",
- "log",
  "nix",
  "shlex",
  "tempfile",

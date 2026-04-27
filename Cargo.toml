@@ -9,7 +9,6 @@ anyhow = "1.0.102"
 clap = { version = "4.6.1", features = ["derive", "env"] }
 nix = { version = "0.31.2", features = ["sched", "mount", "user"] }
 shlex = "1.3.0"
-log = "0.4.29"
 walkdir = "2.5.0"
 ignore = "0.4.25"
 
