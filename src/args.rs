@@ -1,10 +1,12 @@
+use std::fs::File;
+use std::io::Read;
 use clap::Parser;
-use crate::config::Config;
+use log::warn;
 
 #[derive(Parser, Debug)]
 pub struct Args {
-    #[arg(short, long, default_value = ".safely.yml", value_parser = read_config)]
-    pub config: Config,
+    #[arg(short, long, default_value = ".safelyignore", value_parser = read_config)]
+    pub config: String,
 
     #[arg(trailing_var_arg = true)]
     pub command: Vec<String>,
@@ -14,21 +16,26 @@ pub struct Args {
 }
 
 
-fn read_config(path: &str) -> Result<Config, String> {
-    Config::from_file(path).map_err(|_err| "invalid config file provided".into())
+fn read_config(path: &str) -> Result<String, String> {
+    let mut file = File::open(path)
+        .map_err(|_| format!("Could not open file: {}", path))?;
+    let mut content = String::new();
+    file.read_to_string(&mut content)
+        .map_err(|_err| ".safelyignore file read failed".to_string())?;
+    if content.is_empty() {
+        warn!("Config is empty");
+    }
+    Ok(content)
+
 }
 
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Write;
 
     fn write_config() -> tempfile::NamedTempFile {
-        let mut file = tempfile::NamedTempFile::new().unwrap();
-        let default_config = Config::default();
-        serde_yaml_ng::to_writer(&file, &default_config).unwrap();
-        file
+        tempfile::NamedTempFile::new().unwrap()
     }
 
     #[test]
