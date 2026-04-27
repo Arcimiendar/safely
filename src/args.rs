@@ -1,12 +1,26 @@
-use std::fs::File;
-use std::io::Read;
+use std::env;
+use std::fs;
+use std::path::{Path, PathBuf};
 use clap::Parser;
 use log::warn;
+
+
+#[derive(Debug, Clone)]
+pub struct Config {
+    pub content: String,
+    pub root_dir: PathBuf,
+}
+
+impl Config {
+    pub fn new(content: String, root_dir: PathBuf) -> Self {
+        Self { content, root_dir }
+    }
+}
 
 #[derive(Parser, Debug)]
 pub struct Args {
     #[arg(short, long, default_value = ".safelyignore", value_parser = read_config)]
-    pub config: String,
+    pub config: Config,
 
     #[arg(trailing_var_arg = true)]
     pub command: Vec<String>,
@@ -16,17 +30,29 @@ pub struct Args {
 }
 
 
-fn read_config(path: &str) -> Result<String, String> {
-    let mut file = File::open(path)
-        .map_err(|_| format!("Could not open file: {}", path))?;
-    let mut content = String::new();
-    file.read_to_string(&mut content)
-        .map_err(|_err| ".safelyignore file read failed".to_string())?;
-    if content.is_empty() {
-        warn!("Config is empty");
+fn read_config(filename: &str) -> Result<Config, String> {
+    if Path::new(filename).parent().is_some_and(|p| !p.as_os_str().is_empty()) {
+        return Err(format!(
+            "Relative paths are not supported yet. \
+            Pass a filename only; the file will be autodiscovered (got {filename})"
+        ));
     }
-    Ok(content)
 
+    let start = env::current_dir()
+        .map_err(|e| format!("Could not read current dir: {e}"))?;
+    let mut dir = start.as_path();
+    loop {
+        let candidate = dir.join(filename);
+        if candidate.is_file() {
+            let content = fs::read_to_string(&candidate)
+                .map_err(|e| format!("Could not read {}: {e}", candidate.display()))?;
+            return Ok(Config::new(content, dir.to_path_buf()));
+        }
+        match dir.parent() {
+            Some(parent) => dir = parent,
+            None => return Ok(Config::new(String::new(),PathBuf::from("."))),
+        }
+    }
 }
 
 
@@ -34,60 +60,47 @@ fn read_config(path: &str) -> Result<String, String> {
 mod tests {
     use super::*;
 
-    fn write_config() -> tempfile::NamedTempFile {
-        tempfile::NamedTempFile::new().unwrap()
-    }
+    const MISSING: &str = ".safely-missing-test-config";
 
     #[test]
     fn config_short_flag() {
-        let file = write_config();
-        let args = Args::parse_from(["safely", "-c", file.path().to_str().unwrap()]);
+        let args = Args::parse_from(["safely", "-c", MISSING]);
         assert!(args.command.is_empty());
     }
 
     #[test]
-    fn invalid_config_path_errors() {
-        let result = Args::try_parse_from(["safely", "-c", "/does/not/exist.yml"]);
+    fn relative_path_errors() {
+        let result = Args::try_parse_from(["safely", "-c", "sub/config"]);
         assert!(result.is_err());
     }
 
     #[test]
+    fn missing_file_returns_empty_config() {
+        let args = Args::parse_from(["safely", "-c", MISSING]);
+        assert!(args.config.content.is_empty());
+        assert_eq!(args.config.root_dir, PathBuf::from("."));
+    }
+
+    #[test]
     fn collects_trailing_args() {
-        let file = write_config();
         let args = Args::parse_from([
-            "safely",
-            "-c",
-            file.path().to_str().unwrap(),
-            "echo",
-            "hello",
-            "world",
+            "safely", "-c", MISSING, "echo", "hello", "world",
         ]);
         assert_eq!(args.command, vec!["echo", "hello", "world"]);
     }
 
     #[test]
     fn trailing_args_preserve_unknown_flags() {
-        let file = write_config();
         let args = Args::parse_from([
-            "safely",
-            "-c",
-            file.path().to_str().unwrap(),
-            "cmd",
-            "--unknown-flag",
-            "-x",
+            "safely", "-c", MISSING, "cmd", "--unknown-flag", "-x",
         ]);
         assert_eq!(args.command, vec!["cmd", "--unknown-flag", "-x"]);
     }
 
     #[test]
     fn shell_flag() {
-        let file = write_config();
         let args = Args::parse_from([
-            "safely",
-            "-c",
-            file.path().to_str().unwrap(),
-            "--shell",
-            "fish",
+            "safely", "-c", MISSING, "--shell", "fish",
         ]);
         assert_eq!(args.shell, "fish");
     }

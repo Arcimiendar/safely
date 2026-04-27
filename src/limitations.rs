@@ -62,8 +62,15 @@ mod tests {
 
     #[test]
     fn matcher_ignores_comments_and_blank_lines() {
-        let matcher = build_matcher("# comment\n\n*.txt").unwrap();
+        let matcher = build_matcher("# comment\n\n*.txt\n#*.rs").unwrap();
         assert!(matcher.matched("a.txt", false).is_ignore());
+        assert!(!matcher.matched("main.rs", false).is_ignore());
+    }
+
+    #[test]
+    fn matcher_ignores_empty_lines() {
+        let matcher = build_matcher("").unwrap();
+        assert!(!matcher.matched("a.txt", false).is_ignore());
     }
 
     #[test]
