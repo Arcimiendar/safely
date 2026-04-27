@@ -1,6 +1,5 @@
 use anyhow::{anyhow, Result};
 use globset::{Glob, GlobSet, GlobSetBuilder};
-use nix::libc::glob;
 use walkdir::{DirEntry, WalkDir};
 
 fn get_glob_matcher(config: &str) -> Result<GlobSet> {
