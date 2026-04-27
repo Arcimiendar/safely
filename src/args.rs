@@ -1,10 +1,10 @@
-use std::path::PathBuf;
 use clap::Parser;
+use crate::config::Config;
 
 #[derive(Parser, Debug)]
 pub struct Args {
-    #[arg(short, long, default_value = ".safely")]
-    pub config: PathBuf,
+    #[arg(short, long, default_value = ".safely.yml", value_parser = read_config)]
+    pub config: Config,
 
     #[arg(trailing_var_arg = true)]
     pub command: Vec<String>,
@@ -14,52 +14,74 @@ pub struct Args {
 }
 
 
+fn read_config(path: &str) -> Result<Config, String> {
+    Config::from_file(path).map_err(|_err| "invalid config file provided".into())
+}
+
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::Write;
 
-    #[test]
-    fn default_config_when_not_specified() {
-        let args = Args::parse_from(["safely"]);
-        assert_eq!(args.config, PathBuf::from(".safely"));
-        assert!(args.command.is_empty());
-    }
-
-    #[test]
-    fn config_long_flag() {
-        let args = Args::parse_from(["safely", "--config", "/etc/safely.toml"]);
-        assert_eq!(args.config, PathBuf::from("/etc/safely.toml"));
+    fn write_config() -> tempfile::NamedTempFile {
+        let mut file = tempfile::NamedTempFile::new().unwrap();
+        let default_config = Config::default();
+        serde_yaml_ng::to_writer(&file, &default_config).unwrap();
+        file
     }
 
     #[test]
     fn config_short_flag() {
-        let args = Args::parse_from(["safely", "-c", "custom/path"]);
-        assert_eq!(args.config, PathBuf::from("custom/path"));
+        let file = write_config();
+        let args = Args::parse_from(["safely", "-c", file.path().to_str().unwrap()]);
+        assert!(args.command.is_empty());
+    }
+
+    #[test]
+    fn invalid_config_path_errors() {
+        let result = Args::try_parse_from(["safely", "-c", "/does/not/exist.yml"]);
+        assert!(result.is_err());
     }
 
     #[test]
     fn collects_trailing_args() {
-        let args = Args::parse_from(["safely", "echo", "hello", "world"]);
+        let file = write_config();
+        let args = Args::parse_from([
+            "safely",
+            "-c",
+            file.path().to_str().unwrap(),
+            "echo",
+            "hello",
+            "world",
+        ]);
         assert_eq!(args.command, vec!["echo", "hello", "world"]);
-        assert_eq!(args.config, PathBuf::from(".safely"));
-    }
-
-    #[test]
-    fn config_flag_with_trailing_args() {
-        let args = Args::parse_from(["safely", "-c", "cfg", "run", "--force"]);
-        assert_eq!(args.config, PathBuf::from("cfg"));
-        assert_eq!(args.command, vec!["run", "--force"]);
     }
 
     #[test]
     fn trailing_args_preserve_unknown_flags() {
-        let args = Args::parse_from(["safely", "cmd", "--unknown-flag", "-x"]);
+        let file = write_config();
+        let args = Args::parse_from([
+            "safely",
+            "-c",
+            file.path().to_str().unwrap(),
+            "cmd",
+            "--unknown-flag",
+            "-x",
+        ]);
         assert_eq!(args.command, vec!["cmd", "--unknown-flag", "-x"]);
     }
 
     #[test]
     fn shell_flag() {
-        let args = Args::parse_from(["safely", "--shell", "fish"]);
+        let file = write_config();
+        let args = Args::parse_from([
+            "safely",
+            "-c",
+            file.path().to_str().unwrap(),
+            "--shell",
+            "fish",
+        ]);
         assert_eq!(args.shell, "fish");
     }
 }

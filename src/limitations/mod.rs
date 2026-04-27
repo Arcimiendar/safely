@@ -1,9 +1,6 @@
-mod models;
-
-
-use std::path::PathBuf;
 use anyhow::Result;
+use crate::config::Config;
 
-pub fn prepare_limitations(config: &PathBuf) -> Result<()> {
+pub fn prepare_limitations(config: &Config) -> Result<()> {
     Ok(())
 }

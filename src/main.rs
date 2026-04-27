@@ -1,6 +1,7 @@
 mod args;
 mod subprocess;
 mod limitations;
+pub mod config;
 
 use clap::Parser;
 use anyhow::Result;
