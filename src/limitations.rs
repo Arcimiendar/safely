@@ -1,19 +1,20 @@
 use anyhow::{anyhow, Result};
 use ignore::gitignore::{Gitignore, GitignoreBuilder};
 use walkdir::{DirEntry, WalkDir};
+use crate::args::Config;
 
-fn build_matcher(config: &str) -> Result<Gitignore> {
-    let mut builder = GitignoreBuilder::new("./");
-    for line in config.lines() {
+fn build_matcher(config: &Config) -> Result<Gitignore> {
+    let mut builder = GitignoreBuilder::new(&config.root_dir);
+    for line in config.content.lines() {
         builder.add_line(None, line).map_err(|err| anyhow!(err))?;
     }
     builder.build().map_err(|err| anyhow!(err))
 }
 
 
-pub fn prepare_limitations(config: &str) -> Result<()> {
+pub fn prepare_limitations(config: &Config) -> Result<()> {
     let matcher = build_matcher(config)?;
-    WalkDir::new("./")
+    WalkDir::new(&config.root_dir)
         .into_iter()
         .flat_map(Result::ok)
         .filter(|entry| does_entry_match(entry, &matcher))
@@ -36,11 +37,16 @@ fn block(entry: DirEntry) {
 mod tests {
     use super::*;
     use std::fs;
+    use std::path::PathBuf;
     use tempfile::tempdir;
+
+    fn config(content: &str) -> Config {
+        Config::new(content.to_string(), PathBuf::from("."))
+    }
 
     #[test]
     fn matcher_matches_pattern_at_any_depth() {
-        let matcher = build_matcher("*.txt").unwrap();
+        let matcher = build_matcher(&config("*.txt")).unwrap();
         assert!(matcher.matched("a.txt", false).is_ignore());
         assert!(matcher.matched("nested/a.txt", false).is_ignore());
         assert!(!matcher.matched("a.rs", false).is_ignore());
@@ -48,28 +54,28 @@ mod tests {
 
     #[test]
     fn matcher_anchors_patterns_with_leading_slash() {
-        let matcher = build_matcher("/build").unwrap();
+        let matcher = build_matcher(&config("/build")).unwrap();
         assert!(matcher.matched("build", true).is_ignore());
         assert!(!matcher.matched("src/build", true).is_ignore());
     }
 
     #[test]
     fn matcher_supports_negation() {
-        let matcher = build_matcher("*.log\n!keep.log").unwrap();
+        let matcher = build_matcher(&config("*.log\n!keep.log")).unwrap();
         assert!(matcher.matched("a.log", false).is_ignore());
         assert!(!matcher.matched("keep.log", false).is_ignore());
     }
 
     #[test]
     fn matcher_ignores_comments_and_blank_lines() {
-        let matcher = build_matcher("# comment\n\n*.txt\n#*.rs").unwrap();
+        let matcher = build_matcher(&config("# comment\n\n*.txt\n#*.rs")).unwrap();
         assert!(matcher.matched("a.txt", false).is_ignore());
         assert!(!matcher.matched("main.rs", false).is_ignore());
     }
 
     #[test]
     fn matcher_ignores_empty_lines() {
-        let matcher = build_matcher("").unwrap();
+        let matcher = build_matcher(&config("")).unwrap();
         assert!(!matcher.matched("a.txt", false).is_ignore());
     }
 
@@ -79,7 +85,9 @@ mod tests {
         let file = dir.path().join("hit.txt");
         fs::write(&file, "").unwrap();
 
-        let matcher = build_matcher("*.txt").unwrap();
+        let matcher = build_matcher(
+            &Config::new("*.txt".into(), dir.path().to_path_buf())
+        ).unwrap();
         let entry = WalkDir::new(dir.path())
             .into_iter()
             .flat_map(Result::ok)
@@ -95,7 +103,9 @@ mod tests {
         let file = dir.path().join("miss.rs");
         fs::write(&file, "").unwrap();
 
-        let matcher = build_matcher("*.txt").unwrap();
+        let matcher = build_matcher(
+            &Config::new("*.txt".into(), dir.path().to_path_buf())
+        ).unwrap();
         let entry = WalkDir::new(dir.path())
             .into_iter()
             .flat_map(Result::ok)
@@ -107,6 +117,8 @@ mod tests {
 
     #[test]
     fn prepare_limitations_succeeds_with_valid_config() {
-        assert!(prepare_limitations("*.txt").is_ok());
+        let dir = tempdir().unwrap();
+        let cfg = Config::new("*.txt".into(), dir.path().to_path_buf());
+        assert!(prepare_limitations(&cfg).is_ok());
     }
 }

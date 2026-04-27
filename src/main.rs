@@ -11,7 +11,7 @@ use limitations::prepare_limitations;
 
 fn main() -> Result<()> {
     let args = Args::parse();
-    prepare_limitations(&args.config.content)?;
+    prepare_limitations(&args.config)?;
     run_subprocess(&args.shell, &args.command)?;
 
     Ok(())
