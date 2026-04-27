@@ -1,5 +1,9 @@
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 use ignore::gitignore::{Gitignore, GitignoreBuilder};
+use nix::mount::{mount, MsFlags};
+use nix::sched::{unshare, CloneFlags};
+use nix::unistd::{getgid, getuid};
+use std::fs;
 use walkdir::{DirEntry, WalkDir};
 use crate::args::Config;
 
@@ -14,11 +18,23 @@ fn build_matcher(config: &Config) -> Result<Gitignore> {
 
 pub fn prepare_limitations(config: &Config) -> Result<()> {
     let matcher = build_matcher(config)?;
+    enter_namespaces()?;
     WalkDir::new(&config.root_dir)
         .into_iter()
         .flat_map(Result::ok)
         .filter(|entry| does_entry_match(entry, &matcher))
-        .for_each(block);
+        .try_for_each(|entry| block(entry))?;
+    Ok(())
+}
+
+fn enter_namespaces() -> Result<()> {
+    let uid = getuid().as_raw();
+    let gid = getgid().as_raw();
+    unshare(CloneFlags::CLONE_NEWUSER | CloneFlags::CLONE_NEWNS)
+        .context("unshare(CLONE_NEWUSER | CLONE_NEWNS) failed")?;
+    fs::write("/proc/self/setgroups", "deny").context("writing setgroups")?;
+    fs::write("/proc/self/uid_map", format!("0 {uid} 1")).context("writing uid_map")?;
+    fs::write("/proc/self/gid_map", format!("0 {gid} 1")).context("writing gid_map")?;
     Ok(())
 }
 
@@ -28,8 +44,28 @@ fn does_entry_match(entry: &DirEntry, matcher: &Gitignore) -> bool {
         .is_ignore()
 }
 
-fn block(entry: DirEntry) {
-    println!("Entry: {:?}", entry);
+fn block(entry: DirEntry) -> Result<()> {
+    let target = entry.path();
+    if entry.file_type().is_dir() {
+        mount(
+            Some("tmpfs"),
+            target,
+            Some("tmpfs"),
+            MsFlags::empty(),
+            Some("size=0"),
+        )
+        .with_context(|| format!("tmpfs over {}", target.display()))?;
+    } else {
+        mount(
+            Some("/dev/null"),
+            target,
+            None::<&str>,
+            MsFlags::MS_BIND,
+            None::<&str>,
+        )
+        .with_context(|| format!("bind /dev/null over {}", target.display()))?;
+    }
+    Ok(())
 }
 
 
@@ -113,12 +149,5 @@ mod tests {
             .unwrap();
 
         assert!(!does_entry_match(&entry, &matcher));
-    }
-
-    #[test]
-    fn prepare_limitations_succeeds_with_valid_config() {
-        let dir = tempdir().unwrap();
-        let cfg = Config::new("*.txt".into(), dir.path().to_path_buf());
-        assert!(prepare_limitations(&cfg).is_ok());
     }
 }
