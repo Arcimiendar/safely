@@ -23,7 +23,7 @@ pub fn prepare_limitations(config: &Config) -> Result<()> {
         .into_iter()
         .flat_map(Result::ok)
         .filter(|entry| does_entry_match(entry, &matcher))
-        .try_for_each(|entry| block(entry))?;
+        .try_for_each(block)?;
     Ok(())
 }
 
