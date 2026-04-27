@@ -16,8 +16,8 @@ fn get_glob_matcher(config: &str) -> Result<GlobSet> {
 }
 
 
-pub fn prepare_limitations(config_path: &str) -> Result<()> {
-    let glob_set = get_glob_matcher(config_path)?;
+pub fn prepare_limitations(config: &str) -> Result<()> {
+    let glob_set = get_glob_matcher(config)?;
     WalkDir::new("./")
         .into_iter()
         .flat_map(Result::ok)
